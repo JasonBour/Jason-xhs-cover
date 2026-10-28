@@ -19,7 +19,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
 
 | 编号 | 样式名 | 关键识别特征 | 出图工具 |
 |---|---|---|---|
-| **01** | 描边压脸 | 纯黑描边 + 黄色钩子行 + 白色结论行，三行堆叠、**整块钉在画布正中** | `tools/style01_stroke_stack.py` |
+| **01** | 描边压脸 | 纯黑描边 + 黄色钩子行 + 白色结论行，三行堆叠、**整块钉在画布正中且撑满 80% 宽** | `tools/style01_stroke_stack.py` |
 | **02** | 实拍压字 | 无描边、双色裸压、文字**避开**脸 | `tools/compose_cover.py` |
 
 > 用户报编号时**不要反问"是哪个"**，直接查 `style-library/INDEX.md` 拿卡出图。

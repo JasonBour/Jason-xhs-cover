@@ -6,19 +6,21 @@
 底图 100% 保真（不重绘、不磨皮），文字像素级精准，无水印，零 credits。
 
 设计常量（相对画布宽 W 的比例，换画布也成立）
-  可用宽度    usable = 0.83 W
+  字块宽度    block = 0.80 W       ← 硬约束：最宽一行的墨迹宽度，与文案长短无关
+  安全线      usable = 0.88 W      ← 描边外沿绝不越过
+  字块位置    墨迹中心 = 画布中心 (0.5 W, 0.5 H)   ← 硬约束
   描边粗细    stroke = 0.080 × 本行字号
   行距        1.36 × 正文字号（行中心 → 行中心）
   行字号系数  首行 0.91 / 中间 1.00 / 末行 1.065（梯形，末行落点最重）
+  字号范围    0.072 W ≤ S ≤ 0.200 W（下限→加行，上限→仅极短文案触发）
   投影        黑 58/255，偏移 0.0074 W，模糊 0.0056 W
-  默认字块中心 0.56 H（压住眼下→下巴这一段）
 
 用法
   python style01_stroke_stack.py --base 底图.png --out 封面.png \
       --title "如何用 AI 找到属于自己的隐藏天赋！"          # 自动断行
   python style01_stroke_stack.py --base 底图.png --out 封面.png \
       --split "如何用 AI|找到属于自己的|隐藏天赋！"          # 手动分行
-  ... --font heiti --accent "#FF3B30" --zone top          # 换字体/颜色/位置
+  ... --font heiti --accent "#FF3B30" --offset-y -20      # 换字体/颜色/微调
 """
 import argparse
 import os
@@ -31,11 +33,14 @@ FONT_PRESETS = {
     'heiti': (r'C:\Windows\Fonts\simhei.ttf', None),         # 黑体，硬朗综艺感
 }
 
-USABLE = 0.83          # 可用宽度占比（两侧各留 8.5%）
+USABLE = 0.88          # 物理安全线：描边外沿不越界（两侧各留 6%）
 STROKE_RATIO = 0.080   # 描边 / 字号
 LINE_GAP = 1.36        # 行距 / 正文字号
-MAX_SIZE = 0.135       # 单行字号上限 / 画布宽
-DEFAULT_S = 0.116      # 正文字号标准值 / 画布宽（跨封面保持一致）
+
+# ===== 硬约束：字块必须撑满这个宽度，写死，不随文案长短变化 =====
+BLOCK_W = 0.80         # 字块最宽行的墨迹宽度 / 画布宽
+MAX_SIZE = 0.200       # 字号上限 / 画布宽（只在文案极短时触发，防止撑爆）
+MIN_SIZE = 0.072       # 字号下限 / 画布宽（低于此说明字太小，自动加行）
 
 
 def hex2rgba(h, alpha=255):
@@ -205,7 +210,7 @@ preset_holder = {'font': 'noto'}
 
 def render(base, out, title=None, split=None, accent='#FFD400', font='noto',
            offset_y=0, shadow=True, width=1080, height=1440,
-           tracking=-5, stroke_ratio=STROKE_RATIO, size_ratio=DEFAULT_S):
+           tracking=-5, stroke_ratio=STROKE_RATIO):
     preset_holder['font'] = font
     W, H = width, height
 
@@ -214,48 +219,86 @@ def render(base, out, title=None, split=None, accent='#FFD400', font='noto',
 
     lines = ([s.strip() for s in split.split('|') if s.strip()] if split
              else auto_split(title) if title else sys_exit('需要 --title 或 --split'))
-    n = len(lines)
-
-    # 行字号系数：首行 0.91（钩子），末行 1.065（落点），中间 1.0
-    coef = [1.0] if n == 1 else [0.91] + [1.0] * (n - 2) + [1.065]
 
     usable = W * USABLE
     probe = ImageDraw.Draw(Image.new('RGBA', (8, 8)))
-
-    def fits(text, s, c):
-        size = max(8, int(s * c))
-        st = max(6, round(size * stroke_ratio))
-        return probe.textlength(text, font=load_font(font, size)) + 2 * st <= usable
-
-    lo, hi = W * 0.05, W * MAX_SIZE
-    while hi - lo > 1:
-        mid = (lo + hi) / 2
-        if all(fits(ln, mid, c) for ln, c in zip(lines, coef)):
-            lo = mid
-        else:
-            hi = mid
-    # 长文案靠缩小字号兜住；短文案也不放大到破坏系列一致性
-    S = min(lo, W * size_ratio)
-    sizes = [max(int(W * 0.05), int(round(S * c))) for c in coef]
-
-    # ===== 硬约束：整块文字按墨迹包围盒钉在画布正中（左右 + 上下）=====
-    gap = LINE_GAP * S
-    stage = Image.new('RGBA', (W, H * 2), (0, 0, 0, 0))
-    base0 = int(H * 0.90)              # 任意起点，后面会被 bbox 重新定位
     accent_rgba, white = hex2rgba(accent), (255, 255, 255, 255)
-    for i, (ln, size) in enumerate(zip(lines, sizes)):
-        st = max(6, round(size * stroke_ratio))
-        layer, base_in_layer = draw_line(
-            W, ln, size, accent_rgba if i == 0 else white, st,
-            tracking * size / 123.0)
-        if not layer:
-            continue
-        line_baseline = base0 + i * gap
-        stage.alpha_composite(layer, (int(W / 2 - layer.width / 2),
-                                      int(line_baseline - base_in_layer)))
 
-    bbox = stage.getbbox()
-    block = stage.crop(bbox)
+    def coefs(n):
+        """行字号系数：首行 0.91（钩子），末行 1.065（落点），中间 1.0"""
+        return [1.0] if n == 1 else [0.91] + [1.0] * (n - 2) + [1.065]
+
+    st = {'lines': lines, 'coef': coefs(len(lines))}
+
+    def line_w(text, s, c):
+        """某行在字号 s 下的墨迹宽度（含字距与描边）"""
+        size = max(8, int(round(s * c)))
+        stk = max(6, round(size * stroke_ratio))
+        tl = probe.textlength(text, font=load_font(font, size))
+        return tl + (len(text) - 1) * (tracking * size / 123.0) + 2 * stk
+
+    def widest_w(s):
+        return max(line_w(ln, s, c) for ln, c in zip(st['lines'], st['coef']))
+
+    def build(S):
+        """按正文字号 S 渲染整块文字，返回 (图层组, 墨迹裁切块, 各行字号, 行距)"""
+        _gap = LINE_GAP * S
+        _sizes = [max(int(W * 0.05), int(round(S * c))) for c in st['coef']]
+        # 上下各留一倍画布高做缓冲，避免大字被裁
+        stage = Image.new('RGBA', (W, H * 2), (0, 0, 0, 0))
+        base0 = int(H * 0.90)          # 任意起点，后面由 bbox 重新定位
+        for i, (ln, size) in enumerate(zip(st['lines'], _sizes)):
+            stk = max(6, round(size * stroke_ratio))
+            layer, base_in_layer = draw_line(
+                W, ln, size, accent_rgba if i == 0 else white, stk,
+                tracking * size / 123.0)
+            if not layer:
+                continue
+            stage.alpha_composite(
+                layer, (int(W / 2 - layer.width / 2),
+                        int(base0 + i * _gap - base_in_layer)))
+        bb = stage.getbbox()
+        return stage, (stage.crop(bb) if bb else stage), _sizes, _gap
+
+    # ===== 硬约束：字块宽度 = BLOCK_W × W，与文案长短无关 =====
+    target_w = W * BLOCK_W
+
+    def solve():
+        lo, hi = W * MIN_SIZE, W * MAX_SIZE
+        for _ in range(28):           # 解出「刚好撑满目标宽度」的字号
+            mid = (lo + hi) / 2
+            if widest_w(mid) <= target_w:
+                lo = mid
+            else:
+                hi = mid
+        return lo
+
+    S = solve()
+
+    # 字太小 = 说明行数不够：允许突破 3 行限制，最多 4 行
+    if title and not split and len(st['lines']) < 4 and S < W * MIN_SIZE * 1.18:
+        alt = balanced_split(title.strip(), len(st['lines']) + 1)
+        if len(alt) == len(st['lines']) + 1:
+            st['lines'] = alt
+            st['coef'] = coefs(len(alt))
+            S = solve()
+
+    # 实际渲染后按真实墨迹宽度回修（估算与绘图存在 1-2% 偏差）
+    for _ in range(3):
+        stage, block, sizes, gap = build(S)
+        if not block.width:
+            break
+        if abs(block.width - target_w) <= W * 0.006:
+            break
+        S = min(max(S * target_w / block.width, W * MIN_SIZE), W * MAX_SIZE)
+    stage, block, sizes, gap = build(S)
+    lines = st['lines']
+
+    # 极端情况兜底：绝不越过安全线
+    if block.width > usable:
+        S = max(W * MIN_SIZE, S * usable / block.width)
+        stage, block, sizes, gap = build(S)
+
     x = int(round((W - block.width) / 2))
     y = int(round((H - block.height) / 2 + offset_y))
 
@@ -295,18 +338,16 @@ def main():
     ap.add_argument('--height', type=int, default=1440)
     ap.add_argument('--tracking', type=int, default=-5)
     ap.add_argument('--stroke-ratio', type=float, default=STROKE_RATIO)
-    ap.add_argument('--size-ratio', type=float, default=DEFAULT_S,
-                    help='正文字号/画布宽，默认 0.116')
     ap.add_argument('--no-shadow', action='store_true')
     a = ap.parse_args()
 
     p = render(a.base, a.out, a.title, a.split, a.accent, a.font, a.offset_y,
                shadow=not a.no_shadow, width=a.width, height=a.height,
-               tracking=a.tracking, stroke_ratio=a.stroke_ratio,
-               size_ratio=a.size_ratio)
+               tracking=a.tracking, stroke_ratio=a.stroke_ratio)
     print(f"saved: {a.out}  {p['size'][0]}x{p['size'][1]}")
     print(f"字体={a.font}  S={p['S']}  行距={p['gap']}  "
           f"字块 {p['block'][0]}x{p['block'][1]} @ {p['offset']}（画布正中）")
+    print(f"字块宽度占比 = {p['block'][0] / p['size'][0]:.1%}（标准 {BLOCK_W:.0%}）")
     for ln, s in zip(p['lines'], p['sizes']):
         print(f"  [{s:>4}px] {ln}")
 
