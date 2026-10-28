@@ -19,7 +19,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
 
 | 编号 | 样式名 | 关键识别特征 | 出图工具 |
 |---|---|---|---|
-| **01** | 描边压脸 | 纯黑描边 + 黄色钩子行 + 白色结论行，三行堆叠**压脸** | `tools/style01_stroke_stack.py` |
+| **01** | 描边压脸 | 纯黑描边 + 黄色钩子行 + 白色结论行，三行堆叠、**整块钉在画布正中** | `tools/style01_stroke_stack.py` |
 | **02** | 实拍压字 | 无描边、双色裸压、文字**避开**脸 | `tools/compose_cover.py` |
 
 > 用户报编号时**不要反问"是哪个"**，直接查 `style-library/INDEX.md` 拿卡出图。
@@ -67,7 +67,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
 2. **看底图套 dispatch 规则**（见「看图分流铁律」）：底色定字色方案，标题结构定布局，不问用户选变体。
 3. **选技术路线（关键分流）**：
    - **路线 A：PIL 代码合成**——底图**不需要改动**、只压标题时，**默认走这条**。底图 100% 保真（AI 会重绘磨皮真人）、文字像素级正确、无水印、零 credits、秒出。按风格卡指定的工具调用：
-     - 样式 01 描边压脸 → `python tools/style01_stroke_stack.py --base 底图 --out 输出 --split "首行|次行|末行" [--accent] [--font] [--zone]`
+     - 样式 01 描边压脸 → `python tools/style01_stroke_stack.py --base 底图 --out 输出 --split "首行|次行|末行" [--accent] [--font] [--offset-y]`
      - 样式 02 实拍压字 → `python tools/compose_cover.py --base 底图 --out 输出 --small 白短句 --lines 大字行 --color 主字色`
    - 工具都在本 skill 目录内。当前工作目录不确定时**用绝对路径调用**（`~/.workbuddy/skills/cover-style-lab/tools/style01_stroke_stack.py`），别 `cd` 进去再跑。
    - **路线 B：AI 图生图**——底图需要**改造**（换背景/造场景/无底图文生图）时才用。真人底图走 AI 会重绘人物（磨皮、衣物细节变动），做真人 IP 素材慎用。

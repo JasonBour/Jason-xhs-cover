@@ -31,8 +31,6 @@ FONT_PRESETS = {
     'heiti': (r'C:\Windows\Fonts\simhei.ttf', None),         # 黑体，硬朗综艺感
 }
 
-ZONES = {'top': 0.26, 'upper': 0.40, 'face': 0.56, 'lower': 0.70, 'bottom': 0.80}
-
 USABLE = 0.83          # 可用宽度占比（两侧各留 8.5%）
 STROKE_RATIO = 0.080   # 描边 / 字号
 LINE_GAP = 1.36        # 行距 / 正文字号
@@ -187,7 +185,7 @@ def auto_split(text, max_visual=7.4):
 # ------------------------------------------------------------ 绘制
 
 def draw_line(canvas_w, text, size, fill, stroke, tracking):
-    """逐字绘制（字距可控），按墨迹裁切返回图层"""
+    """逐字绘制（字距可控），按墨迹裁切。返回 (图层, 基线在图层内的 y)"""
     f = load_font(preset_holder['font'], size)
     tmp = Image.new('RGBA', (canvas_w + 600, int(size * 2.6)), (0, 0, 0, 0))
     d = ImageDraw.Draw(tmp)
@@ -197,14 +195,16 @@ def draw_line(canvas_w, text, size, fill, stroke, tracking):
                stroke_width=stroke, stroke_fill=(0, 0, 0, 255))
         x += d.textlength(ch, font=f) + tracking
     bbox = tmp.getbbox()
-    return tmp.crop(bbox) if bbox else None
+    if not bbox:
+        return None, 0
+    return tmp.crop(bbox), baseline - bbox[1]
 
 
 preset_holder = {'font': 'noto'}
 
 
 def render(base, out, title=None, split=None, accent='#FFD400', font='noto',
-           zone='face', y=None, shadow=True, width=1080, height=1440,
+           offset_y=0, shadow=True, width=1080, height=1440,
            tracking=-5, stroke_ratio=STROKE_RATIO, size_ratio=DEFAULT_S):
     preset_holder['font'] = font
     W, H = width, height
@@ -238,38 +238,43 @@ def render(base, out, title=None, split=None, accent='#FFD400', font='noto',
     S = min(lo, W * size_ratio)
     sizes = [max(int(W * 0.05), int(round(S * c))) for c in coef]
 
-    center_y = y if y is not None else H * ZONES.get(zone, 0.56)
+    # ===== 硬约束：整块文字按墨迹包围盒钉在画布正中（左右 + 上下）=====
     gap = LINE_GAP * S
-    centers = [center_y + (i - (n - 1) / 2) * gap for i in range(n)]
-
+    stage = Image.new('RGBA', (W, H * 2), (0, 0, 0, 0))
+    base0 = int(H * 0.90)              # 任意起点，后面会被 bbox 重新定位
     accent_rgba, white = hex2rgba(accent), (255, 255, 255, 255)
-    layers = []
-    for i, (ln, size, cy) in enumerate(zip(lines, sizes, centers)):
+    for i, (ln, size) in enumerate(zip(lines, sizes)):
         st = max(6, round(size * stroke_ratio))
-        layer = draw_line(W, ln, size, accent_rgba if i == 0 else white,
-                          st, tracking * size / 123.0)
-        if layer:
-            layers.append((layer, cy, size))
+        layer, base_in_layer = draw_line(
+            W, ln, size, accent_rgba if i == 0 else white, st,
+            tracking * size / 123.0)
+        if not layer:
+            continue
+        line_baseline = base0 + i * gap
+        stage.alpha_composite(layer, (int(W / 2 - layer.width / 2),
+                                      int(line_baseline - base_in_layer)))
+
+    bbox = stage.getbbox()
+    block = stage.crop(bbox)
+    x = int(round((W - block.width) / 2))
+    y = int(round((H - block.height) / 2 + offset_y))
 
     if shadow:
-        sh = Image.new('RGBA', (W, H), (0, 0, 0, 0))
         off = max(3, round(W * 0.0074))
-        for layer, cy, size in layers:
-            sil = Image.new('RGBA', layer.size, (0, 0, 0, 0))
-            sil.paste((0, 0, 0, 58), (0, 0), layer.getchannel('A'))
-            sh.alpha_composite(sil, (int(W / 2 - layer.width / 2),
-                                     int(cy + size * 0.355 - layer.height / 2 + off)))
+        sil = Image.new('RGBA', block.size, (0, 0, 0, 0))
+        sil.paste((0, 0, 0, 58), (0, 0), block.getchannel('A'))
+        sh = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        sh.alpha_composite(sil, (x, min(y + off, H - block.height)))
         img = Image.alpha_composite(
             img.convert('RGBA'),
             sh.filter(ImageFilter.GaussianBlur(max(2, round(W * 0.0056)))))
 
-    for layer, cy, size in layers:
-        img.alpha_composite(layer, (int(W / 2 - layer.width / 2),
-                                    int(cy + size * 0.355 - layer.height / 2)))
+    img.alpha_composite(block, (x, y))
 
     img.convert('RGB').save(out, quality=96)
-    return {'lines': lines, 'sizes': sizes, 'S': round(S), 'zone': zone,
-            'center_y': int(center_y), 'gap': int(gap), 'size': (W, H)}
+    return {'lines': lines, 'sizes': sizes, 'S': round(S), 'gap': int(gap),
+            'block': (block.width, block.height), 'offset': (x, y),
+            'size': (W, H)}
 
 
 def sys_exit(msg):
@@ -284,8 +289,8 @@ def main():
     ap.add_argument('--split', help='手动分行，用 | 分隔')
     ap.add_argument('--accent', default='#FFD400', help='首行钩子色，默认亮黄')
     ap.add_argument('--font', default='noto', choices=list(FONT_PRESETS))
-    ap.add_argument('--zone', default='face', choices=list(ZONES))
-    ap.add_argument('--y', type=int, default=None, help='直接指定字块中心 y')
+    ap.add_argument('--offset-y', type=int, default=0,
+                    help='在正中基础上的微调像素，默认 0（正=下移）')
     ap.add_argument('--width', type=int, default=1080)
     ap.add_argument('--height', type=int, default=1440)
     ap.add_argument('--tracking', type=int, default=-5)
@@ -295,12 +300,13 @@ def main():
     ap.add_argument('--no-shadow', action='store_true')
     a = ap.parse_args()
 
-    p = render(a.base, a.out, a.title, a.split, a.accent, a.font, a.zone, a.y,
+    p = render(a.base, a.out, a.title, a.split, a.accent, a.font, a.offset_y,
                shadow=not a.no_shadow, width=a.width, height=a.height,
                tracking=a.tracking, stroke_ratio=a.stroke_ratio,
                size_ratio=a.size_ratio)
     print(f"saved: {a.out}  {p['size'][0]}x{p['size'][1]}")
-    print(f"字体={a.font}  S={p['S']}  行距={p['gap']}  字块中心y={p['center_y']}")
+    print(f"字体={a.font}  S={p['S']}  行距={p['gap']}  "
+          f"字块 {p['block'][0]}x{p['block'][1]} @ {p['offset']}（画布正中）")
     for ln, s in zip(p['lines'], p['sizes']):
         print(f"  [{s:>4}px] {ln}")
 
