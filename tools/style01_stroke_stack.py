@@ -334,15 +334,15 @@ def main():
     ap.add_argument('--font', default='noto', choices=list(FONT_PRESETS))
     ap.add_argument('--offset-y', type=int, default=0,
                     help='在正中基础上的微调像素，默认 0（正=下移）')
-    ap.add_argument('--width', type=int, default=1080)
-    ap.add_argument('--height', type=int, default=1440)
+    ap.add_argument('--width', type=int, default=1080,
+                    help='画布宽，高度自动按 3:4 计算（全库统一 3:4）')
     ap.add_argument('--tracking', type=int, default=-5)
     ap.add_argument('--stroke-ratio', type=float, default=STROKE_RATIO)
     ap.add_argument('--no-shadow', action='store_true')
     a = ap.parse_args()
 
     p = render(a.base, a.out, a.title, a.split, a.accent, a.font, a.offset_y,
-               shadow=not a.no_shadow, width=a.width, height=a.height,
+               shadow=not a.no_shadow, width=a.width, height=round(a.width * 4 / 3),
                tracking=a.tracking, stroke_ratio=a.stroke_ratio)
     print(f"saved: {a.out}  {p['size'][0]}x{p['size'][1]}")
     print(f"字体={a.font}  S={p['S']}  行距={p['gap']}  "

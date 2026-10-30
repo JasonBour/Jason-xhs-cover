@@ -13,7 +13,7 @@ from PIL import Image, FontFile  # noqa
 from PIL import ImageFont, ImageDraw
 
 FONT_PATH = r"C:\Windows\Fonts\NotoSansSC-VF.ttf"  # 思源黑体可变字体，可拉满字重
-TARGET_W, TARGET_H = 1242, 1656  # 小红书 3:4
+TARGET_W, TARGET_H = 1080, 1440  # 全库统一 3:4
 RATIO = TARGET_W / TARGET_H
 
 
@@ -48,14 +48,12 @@ def draw_text_with_shadow(
     shadow: tuple = (0, 0, 0, 150),
     shadow_offset: tuple = (5, 7),
 ):
-    """居中画字 + 半透明投影"""
+    """居中画字 + 半透明投影（anchor=mm，按字身框居中，不会偏出画布）"""
     d = ImageDraw.Draw(layer)
-    bbox = d.textbbox((0, 0), text, font=font)
-    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    x = xy_center[0] - tw // 2 - bbox[0]
-    y = xy_center[1] - th // 2 - bbox[3]
-    d.text((x + shadow_offset[0], y + shadow_offset[1]), text, font=font, fill=shadow)
-    d.text((x, y), text, font=font, fill=fill)
+    cx, cy = xy_center
+    d.text((cx + shadow_offset[0], cy + shadow_offset[1]),
+           text, font=font, fill=shadow, anchor="mm")
+    d.text((cx, cy), text, font=font, fill=fill, anchor="mm")
 
 
 def hex2rgba(h: str, alpha: int = 255) -> tuple:
@@ -70,8 +68,8 @@ def main():
     ap.add_argument("--small", default=None, help="顶部白色小短句(可选)")
     ap.add_argument("--lines", nargs="+", required=True, help="主标题行(金黄大字,可多行)")
     ap.add_argument("--color", default="#E8B92E", help="主标题色,默认金黄")
-    ap.add_argument("--small-size", type=int, default=92)
-    ap.add_argument("--big-size", type=int, default=138)
+    ap.add_argument("--small-size", type=int, default=80)
+    ap.add_argument("--big-size", type=int, default=120)
     args = ap.parse_args()
 
     img = crop_to_ratio(Image.open(args.base).convert("RGB"))
