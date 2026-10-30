@@ -22,6 +22,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
 | **01** | 描边压脸 | 纯黑描边 + 黄色钩子行 + 白色结论行，三行堆叠、**整块钉在画布正中且撑满 80% 宽** | `tools/style01_stroke_stack.py` |
 | **02** | 上下压边 | 顶一行大标签 + 底两行大字，**上下一夹、中间整块露人**；无描边，顶宋体底黑体，每行独立撑满 87.5%/90.5% 宽 | `tools/style02_edge_anchor.py` |
 | **03** | 白条压字 | **纯白硬边横条** + **黑色宋体**，左对齐，横切人物腰腹 | `tools/style03_white_bar.py` |
+| **04** | 斜字压顶 | **顶部超大斜切彩字 + 底部两行白字 + 下半身暗化底带**，中间露人；只留两处文字，不做角标/按钮 | `tools/style04_title_band.py` |
 
 > **画布统一 3:4（1080×1440）**。三个出图器都只出 3:4，`--width` 只改宽度、高度自动按比例算。这条不接受覆盖——同一批封面要做合集、做主页九宫格，比例不一致就废了。
 
@@ -73,6 +74,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
      - 样式 01 描边压脸 → `python tools/style01_stroke_stack.py --base 底图 --out 输出 --split "首行|次行|末行" [--accent] [--font] [--offset-y]`
      - 样式 02 上下压边 → `python tools/style02_edge_anchor.py --base 底图 --out 输出 --split "顶行|底1|底2" [--accent] [--bot-font] [--offset-y]`
      - 样式 03 白条压字 → `python tools/style03_white_bar.py --base 底图 --out 输出 --split "上句|下句" [--weight] [--font] [--offset-y]`
+     - 样式 04 斜字压顶 → `python tools/style04_title_band.py --base 底图 --out 输出 --split "标题|底1|底2" [--title-color] [--italic] [--veil] [--align]`
    - 工具都在本 skill 目录内。当前工作目录不确定时**用绝对路径调用**（`~/.workbuddy/skills/cover-style-lab/tools/style01_stroke_stack.py`），别 `cd` 进去再跑。
    - **路线 B：AI 图生图**——底图需要**改造**（换背景/造场景/无底图文生图）时才用。真人底图走 AI 会重绘人物（磨皮、衣物细节变动），做真人 IP 素材慎用。
    - AI 路线仍受 credits 约束：单张约 5-10，跑前报数。
@@ -104,6 +106,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
 | 用第一种样式 / 样式01 / 一号封面 | 直接读编号表 → 调 `style01_stroke_stack.py` |
 | 用上下压边 / 样式02 / 二号封面 | 直接读编号表 → 调 `style02_edge_anchor.py` |
 | 用白条 / 样式03 / 三号封面 | 直接读编号表 → 调 `style03_white_bar.py` |
+| 用斜字压顶 / 样式04 / 四号封面 | 直接读编号表 → 调 `style04_title_band.py` |
 | 看看有哪几种风格 | 读 `style-library/INDEX.md`，把 `assets/showcase/all-styles.jpg` 总览图给对方 |
 | 把这个样式变成标准 / 存为样式 | Stage 2 + 落一个**带编号**的卡 + 对应工具，可复用才算标准 |
 | 有哪些风格了 | 读 `style-library/INDEX.md` 展示清单（带编号） |
@@ -142,7 +145,8 @@ cover-style-lab/
 ├── tools/
 │   ├── style01_stroke_stack.py # ✅ 样式01 出图器（PIL，零 credits）
 │   ├── style02_edge_anchor.py  # ✅ 样式02 出图器
-│   └── style03_white_bar.py    # 样式03 出图器
+│   ├── style03_white_bar.py    # 样式03 出图器
+│   └── style04_title_band.py   # 样式04 出图器
 ├── _archive/                   # 已退役的卡与工具（不进编号）
 └── output/                     # Stage 3 出图结果
     └── <YYYY-MM-DD>/<标题>.png
