@@ -1,6 +1,6 @@
 ---
 name: cover-style-lab
-description: 封面风格工坊。把用户不断投喂的优质 IP 封面图归纳成可复刻的「风格卡片」+ 编号（样式01 描边压脸 / 样式02 实拍压字 / 样式03 白条压字），未来用户给底图+文案标题时，按编号或风格匹配直接产出对应封面图。所有封面统一 3:4。触发词："参考图"/"收藏这张封面"/"存个风格"/"按这个风格出图"/"封面图"/"cover"/"分析这张图什么风格"/"用第一种样式"/"样式01"/"把这个样式变成标准"。三段流程：collect(收图拆解) → taxonomy(归纳风格库) → compose(按风格出图)。
+description: 封面风格工坊。把用户不断投喂的优质 IP 封面图归纳成可复刻的「风格卡片」+ 编号（样式01 描边压脸 / 样式02 上下压边 / 样式03 白条压字），未来用户给底图+文案标题时，按编号或风格匹配直接产出对应封面图。所有封面统一 3:4。触发词："参考图"/"收藏这张封面"/"存个风格"/"按这个风格出图"/"封面图"/"cover"/"分析这张图什么风格"/"用第一种样式"/"样式01"/"把这个样式变成标准"。三段流程：collect(收图拆解) → taxonomy(归纳风格库) → compose(按风格出图)。
 argument-hint: [收图|出图] [图片/链接] [文案标题]
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferExecuteTool), WebFetch
 ---
@@ -20,7 +20,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
 | 编号 | 样式名 | 关键识别特征 | 出图工具 |
 |---|---|---|---|
 | **01** | 描边压脸 | 纯黑描边 + 黄色钩子行 + 白色结论行，三行堆叠、**整块钉在画布正中且撑满 80% 宽** | `tools/style01_stroke_stack.py` |
-| **02** | 实拍压字 | 无描边、双色裸压、文字**避开**脸，堆顶部 | `tools/compose_cover.py` |
+| **02** | 上下压边 | 顶一行大标签 + 底两行大字，**上下一夹、中间整块露人**；无描边，顶宋体底黑体，每行独立撑满 87.5%/90.5% 宽 | `tools/style02_edge_anchor.py` |
 | **03** | 白条压字 | **纯白硬边横条** + **黑色宋体**，左对齐，横切人物腰腹 | `tools/style03_white_bar.py` |
 
 > **画布统一 3:4（1080×1440）**。三个出图器都只出 3:4，`--width` 只改宽度、高度自动按比例算。这条不接受覆盖——同一批封面要做合集、做主页九宫格，比例不一致就废了。
@@ -71,7 +71,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
 3. **选技术路线（关键分流）**：
    - **路线 A：PIL 代码合成**——底图**不需要改动**、只压标题时，**默认走这条**。底图 100% 保真（AI 会重绘磨皮真人）、文字像素级正确、无水印、零 credits、秒出。按风格卡指定的工具调用：
      - 样式 01 描边压脸 → `python tools/style01_stroke_stack.py --base 底图 --out 输出 --split "首行|次行|末行" [--accent] [--font] [--offset-y]`
-     - 样式 02 实拍压字 → `python tools/compose_cover.py --base 底图 --out 输出 --small 白短句 --lines 大字行 --color 主字色`
+     - 样式 02 上下压边 → `python tools/style02_edge_anchor.py --base 底图 --out 输出 --split "顶行|底1|底2" [--accent] [--bot-font] [--offset-y]`
      - 样式 03 白条压字 → `python tools/style03_white_bar.py --base 底图 --out 输出 --split "上句|下句" [--weight] [--font] [--offset-y]`
    - 工具都在本 skill 目录内。当前工作目录不确定时**用绝对路径调用**（`~/.workbuddy/skills/cover-style-lab/tools/style01_stroke_stack.py`），别 `cd` 进去再跑。
    - **路线 B：AI 图生图**——底图需要**改造**（换背景/造场景/无底图文生图）时才用。真人底图走 AI 会重绘人物（磨皮、衣物细节变动），做真人 IP 素材慎用。
@@ -102,8 +102,9 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
 | 这几个是一类 / 归类 / 建风格 | Stage 2 Taxonomy（收敛成风格卡） |
 | 按这个风格出封面 / 出图 / 帮我做个封面 | Stage 3 Compose（看图→按卡内 dispatch 规则分流配色→出图） |
 | 用第一种样式 / 样式01 / 一号封面 | 直接读编号表 → 调 `style01_stroke_stack.py` |
+| 用上下压边 / 样式02 / 二号封面 | 直接读编号表 → 调 `style02_edge_anchor.py` |
 | 用白条 / 样式03 / 三号封面 | 直接读编号表 → 调 `style03_white_bar.py` |
-| 看看有哪几种风格 | 读 `style-library/INDEX.md`，把 `assets/showcase/all-styles.png` 总览图给对方 |
+| 看看有哪几种风格 | 读 `style-library/INDEX.md`，把 `assets/showcase/all-styles.jpg` 总览图给对方 |
 | 把这个样式变成标准 / 存为样式 | Stage 2 + 落一个**带编号**的卡 + 对应工具，可复用才算标准 |
 | 有哪些风格了 | 读 `style-library/INDEX.md` 展示清单（带编号） |
 
@@ -133,16 +134,16 @@ cover-style-lab/
 │   ├── INDEX.md                #   带编号的风格总览（先读这里）
 │   ├── 01-描边压脸.md          #   ✅ 样式01 卡
 │   ├── 01-描边压脸/            #   样式01 代表缩略图
-│   ├── 实拍压字.md             #   样式02 卡
-│   ├── 实拍压字/
+│   ├── 02-上下压边.md          #   ✅ 样式02 卡
 │   └── 03-白条压字.md          #   ✅ 样式03 卡
 ├── assets/
 │   ├── demo-base-3x4.jpg       # 统一样例底图（出总览图用）
 │   └── showcase/               # 每风格一张总览图 + all-styles.png 三合一
 ├── tools/
 │   ├── style01_stroke_stack.py # ✅ 样式01 出图器（PIL，零 credits）
-│   ├── compose_cover.py        # 样式02 出图器
+│   ├── style02_edge_anchor.py  # ✅ 样式02 出图器
 │   └── style03_white_bar.py    # 样式03 出图器
+├── _archive/                   # 已退役的卡与工具（不进编号）
 └── output/                     # Stage 3 出图结果
     └── <YYYY-MM-DD>/<标题>.png
 ```
