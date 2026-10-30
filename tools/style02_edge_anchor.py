@@ -8,11 +8,12 @@
 
 设计常量（相对画布 W / H 的比例，换画布也成立）
   顶行目标宽   0.875 W       ← 硬约束：顶行墨迹宽度，与文案长短无关
-  底行目标宽   0.905 W       ← 硬约束：底部每行墨迹宽度
+  底行目标宽   0.905 W       ← 底部【末行】墨迹宽（落点，最大）
+  底行引导宽   0.775 W       ← 底部【前几行】墨迹宽（引导，比末行小一档）
   顶行顶边距   0.056 H       ← 墨迹顶边到画布顶（不贴边）
   底行底边距   0.045 H       ← 末行墨迹底边到画布底（不贴边）
   底行行间空隙 0.034 H       ← 上一行墨迹底 → 下一行墨迹顶
-  投影         双层：扩散影（膨胀 0.0035 W + 模糊 0.004 W，黑 125/255）+ 厚度影（下移 0.0042 H，模糊 0.0035 W，黑 170/255）
+  投影         双层：暗晕（模糊 0.0038 W，黑 150/255，无偏移）+ 实影（下移 0.006 H，模糊 0.0032 W，黑 215/255）
   遮罩         --scrim auto：按上下带亮度自动压 0-120 的黑渐变，浅底必压、深底不压
 
 字体分工（照抄参考图）
@@ -44,7 +45,8 @@ BOT_FONTS = {
 }
 
 TOP_W = 0.875          # 顶行墨迹宽 / 画布宽
-BOT_W = 0.905          # 底行墨迹宽 / 画布宽
+BOT_W = 0.905          # 底行「末行」墨迹宽 / 画布宽（落点，最大）
+BOT_W_LEAD = 0.690     # 底行「前几行」墨迹宽 / 画布宽（引导，明显更小）
 TOP_INSET = 0.0560     # 顶行墨迹顶边距 / 画布高（留够呼吸，不贴边）
 BOT_INSET = 0.0450     # 末行墨迹底边距 / 画布高（留够呼吸，不贴边）
 BOT_GAP = 0.034        # 底行行间空隙 / 画布高
@@ -55,12 +57,11 @@ MAX_SIZE = 0.300       # 字号上限 / 画布宽
 ACCENT = '#FFD400'     # 与样式01 同色：黄做钩子
 INK = '#FFFFFF'        # 白做结论
 
-SHADOW_ALPHA = 185     # 厚度影：向下偏的实影
-SHADOW_DY = 0.0050     # 偏移 / 画布高
-SHADOW_BLUR = 0.0030   # 模糊 / 画布宽
-HALO_ALPHA = 100       # 扩散影：无偏移的柔和暗晕，任何底图上都能把字托出来
-HALO_BLUR = 0.0040     # 模糊 / 画布宽（必须小于笔画间隙，否则字内缝会被糊死）
-HALO_DILATE = 0.0035   # 先膨胀再模糊：光晕贴着笔画外沿走，不外溢
+SHADOW_ALPHA = 215     # 厚度影：向下偏的实影
+SHADOW_DY = 0.0060     # 偏移 / 画布高
+SHADOW_BLUR = 0.0032   # 模糊 / 画布宽
+HALO_ALPHA = 150       # 扩散影：无偏移的暗晕，任何底图上都能把字托出来
+HALO_BLUR = 0.0038     # 模糊 / 画布宽（必须小于半个笔画间隙，否则字内缝会被糊死）
 
 
 def hex2rgba(h, alpha=255):
@@ -244,8 +245,11 @@ def render(base, out, split=None, top=None, bottom=None,
     # 逐行反解字号（每行独立撑满目标宽度）
     top_layers = [fit_line(t, TOP_FONTS, top_font, W * TOP_W, color_top, W)
                   for t in top_lines]
-    bot_layers = [fit_line(t, BOT_FONTS, bot_font, W * BOT_W, color_bot, W)
-                  for t in bot_lines]
+    bot_layers = []
+    for i, t in enumerate(bot_lines):
+        tw = BOT_W if i == len(bot_lines) - 1 else BOT_W_LEAD
+        bot_layers.append(
+            fit_line(t, BOT_FONTS, bot_font, W * tw, color_bot, W))
 
     # 排布：顶行贴顶，底行自下而上堆叠
     stage = Image.new('RGBA', (W, H), (0, 0, 0, 0))
@@ -299,9 +303,7 @@ def render(base, out, split=None, top=None, bottom=None,
         # ① 扩散影：按字形轮廓向外糊一圈柔和暗晕，浅底/花底都能把字托出来
         halo = Image.new('RGBA', (W, H), (0, 0, 0, 0))
         halo.paste((0, 0, 0, HALO_ALPHA), (0, 0), alpha)
-        # 先小膨胀再模糊：光晕紧贴笔画外沿，不会往字内的笔画缝里灌
-        dil = max(3, int(round(W * HALO_DILATE)) | 1)
-        halo = halo.filter(ImageFilter.MaxFilter(min(dil, 9)))
+        # 纯高斯：半径必须小于半个笔画间隙（≈6px @1080），否则字内缝会被灌灰
         halo = halo.filter(ImageFilter.GaussianBlur(max(1.5, W * HALO_BLUR)))
         img = Image.alpha_composite(img, halo)
         # ② 厚度影：向下偏移的实影，给字一点压出来的重量
