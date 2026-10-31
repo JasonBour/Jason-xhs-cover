@@ -57,6 +57,7 @@ BOT_W_LEAD = 0.800     # 前几行墨迹宽 / 画布宽（引导）
 BOT_INSET = 0.045      # 末行墨迹底边距 / 画布高
 BOT_GAP = 0.018        # 底行行间空隙 / 画布高
 BOT_LEFT = 0.038       # 底行左边距 / 画布宽（左对齐时）
+BOT_SIZE_CAP = 0.85    # 底行字号上限 / 标题字号 —— 短句不许比标题还大
 
 MIN_SIZE = 0.055
 MAX_SIZE = 0.420       # 顶行 2-4 字时会放得很大
@@ -65,8 +66,8 @@ TITLE_COLOR = '#4490DC'   # 参考图实测：标题蓝 (68,144,220)
 INK = '#FFFFFF'
 
 VEIL_COLOR = '#0E2352'    # 底带：深蓝黑（不是纯黑，底图会保持蓝调）
-VEIL_PEAK = 185           # 底带最浓处 alpha
-VEIL_TOP = 0.46           # 底带从这一行开始向上渐隐
+VEIL_PEAK = 205           # 底带最浓处 alpha（白底图必须压到 190+ 白字才站得住）
+VEIL_TOP = 0.55           # 底带起点：这条线以上一点不压（保住上半身干净）
 
 SHADOW_ALPHA = 210
 SHADOW_DY = 0.0055
@@ -212,9 +213,14 @@ def shear(layer, deg):
 
 
 def fit_line(text, presets, preset, target_w, color, canvas_w,
-             italic=0.0, stroke_w=0.0, stroke_color=None):
-    """二分反解字号，让这一行【剪切后】的墨迹宽度 = target_w"""
-    lo, hi = canvas_w * MIN_SIZE, canvas_w * MAX_SIZE
+             italic=0.0, stroke_w=0.0, stroke_color=None, max_size=None):
+    """二分反解字号，让这一行【剪切后】的墨迹宽度 = target_w
+    max_size：字号硬上限（像素）。给底行用，短句不许放大到比标题还大。
+    """
+    hi = canvas_w * MAX_SIZE
+    if max_size:
+        hi = min(hi, max_size)
+    lo = min(canvas_w * MIN_SIZE, hi)
     best = None
     for _ in range(24):
         mid = (lo + hi) / 2
@@ -239,7 +245,7 @@ def fit_line(text, presets, preset, target_w, color, canvas_w,
         ratio = target_w / layer.width
         if abs(1 - ratio) < 0.004:
             break
-        size = min(max(size * ratio, canvas_w * MIN_SIZE), canvas_w * MAX_SIZE)
+        size = min(max(size * ratio, canvas_w * MIN_SIZE), hi)
         layer = draw_line(text, presets, preset, size, color, italic,
                           stroke_w, stroke_color)
     return layer, size
@@ -258,16 +264,16 @@ def add_shadow(img, layer, pos, alpha, dx, dy, blur):
 # ------------------------------------------------------------ 底带
 
 def build_veil(W, H, color, peak, top_ratio):
-    """从 top_ratio 向上渐隐、向下加深的底带（深蓝黑，不是纯黑）"""
-    grad = Image.new('L', (1, H), peak)
+    """底带：top_ratio 以上完全不压，以下按幂函数加深
+    以前是从上一路斜下来（0.46H 处已有半浓度），白底图会被整张蒙灰，人物全脏。
+    现在起点之上 alpha=0，上半身一点不动。
+    """
+    grad = Image.new('L', (1, H), 0)
     start = int(H * top_ratio)
     span = max(1, H - start)
-    for y in range(start):
-        # 上半段：从 0 快速升到 ~55% 峰值
-        grad.putpixel((0, y), int(peak * 0.55 * (y / start) ** 2.1))
     for y in range(start, H):
         t = (y - start) / span
-        grad.putpixel((0, y), int(peak * (0.55 + 0.45 * min(1.0, t * 2.2))))
+        grad.putpixel((0, y), int(peak * (t ** 0.80)))
     mask = grad.resize((W, H))
     veil = Image.new('RGBA', (W, H), hex2rgba(color))
     veil.putalpha(mask)
@@ -279,10 +285,10 @@ def build_veil(W, H, color, peak, top_ratio):
 def render(base, out, split=None, top=None, bottom=None,
            title_font='noto', bot_font='noto',
            title_color=TITLE_COLOR, ink=INK,
-           italic=ITALIC, title_stroke=TITLE_STROKE,
+           italic=ITALIC, title_stroke=TITLE_STROKE, title_w=TITLE_W,
            width=1080, height=1440, offset_y=0,
            shadow=True, veil='auto', veil_color=VEIL_COLOR, veil_peak=VEIL_PEAK,
-           align='left', demo_grid=False):
+           align='left', bot_cap=BOT_SIZE_CAP, demo_grid=False):
     W, H = width, height
 
     img = crop_to_ratio(Image.open(base).convert('RGB'), W / H).resize(
@@ -306,9 +312,9 @@ def render(base, out, split=None, top=None, bottom=None,
     if veil == 'auto':
         import numpy as np
         arr = np.asarray(img.convert('RGB'), dtype=float)
-        band = arr[int(H * 0.62):].mean()
+        band = arr[int(H * 0.66):].mean()
         # 深底不用压，浅底压满；底图越亮压得越重（参考图那种「下半身压出一块暗蓝」）
-        veil_a = int(max(60, min(veil_peak, (band - 70) * 1.25)))
+        veil_a = int(max(60, min(veil_peak, (band - 80) * 2.4)))
     elif veil in (0, '0', None):
         veil_a = 0
     else:
@@ -318,14 +324,19 @@ def render(base, out, split=None, top=None, bottom=None,
             img, build_veil(W, H, veil_color, veil_a, VEIL_TOP))
 
     # ---- 逐行反解字号
-    title_layers = [fit_line(t, TITLE_FONTS, title_font, W * TITLE_W, tc, W,
+    title_layers = [fit_line(t, TITLE_FONTS, title_font, W * title_w, tc, W,
                              italic=italic, stroke_w=0,
                              stroke_color=None)
                     for t in top_lines]
+    # 底行字号天花板：不许超过标题的 0.92 —— 短句（如「三个建议」）撑满宽会反客为主
+    cap = None
+    if title_layers and title_layers[0][1]:
+        cap = title_layers[0][1] * bot_cap
     bot_layers = []
     for i, t in enumerate(bot_lines):
         tw = BOT_W if i == len(bot_lines) - 1 else BOT_W_LEAD
-        bot_layers.append(fit_line(t, BOT_FONTS, bot_font, W * tw, wht, W))
+        bot_layers.append(fit_line(t, BOT_FONTS, bot_font, W * tw, wht, W,
+                                   max_size=cap))
 
     title_stage = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     bot_stage = Image.new('RGBA', (W, H), (0, 0, 0, 0))
@@ -410,6 +421,10 @@ def main():
     ap.add_argument('--ink', default=INK, help='底行色，默认白')
     ap.add_argument('--italic', type=float, default=ITALIC,
                     help='标题斜切角度，默认 28 度；0 = 不斜')
+    ap.add_argument('--bot-cap', type=float, default=BOT_SIZE_CAP,
+                    help='底行字号上限 / 标题字号，默认 0.92；1.5 = 放开')
+    ap.add_argument('--title-w', type=float, default=TITLE_W,
+                    help='标题墨迹宽 / 画布宽，默认 0.86；字贴边时收到 0.80-0.83')
     ap.add_argument('--align', default='left', choices=['left', 'center'],
                     help='底行对齐，默认左对齐（参考图特征）')
     ap.add_argument('--width', type=int, default=1080,
@@ -425,11 +440,11 @@ def main():
 
     p = render(a.base, a.out, a.split, a.top, a.bottom,
                a.title_font, a.bot_font, a.title_color, a.ink,
-               a.italic, TITLE_STROKE, a.width, round(a.width * 4 / 3),
+               a.italic, TITLE_STROKE, a.title_w, a.width, round(a.width * 4 / 3),
                offset_y=a.offset_y, shadow=not a.no_shadow,
                veil=(a.veil if a.veil == 'auto' else int(a.veil)),
                veil_color=a.veil_color,
-               align=a.align, demo_grid=a.demo_grid)
+               align=a.align, bot_cap=a.bot_cap, demo_grid=a.demo_grid)
     W, H = p['size']
     print(f"saved: {a.out}  {W}x{H}  veil={p['veil']}")
     for r in p['records']:
