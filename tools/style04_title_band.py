@@ -12,7 +12,7 @@
 
 设计常量（相对画布 W / H，换画布也成立）
   标题墨迹宽   0.860 W   ← 硬约束：与字数无关，字号是变量
-  标题斜切     28°       ← 向右倾，模拟斜体；宽度反解时按剪切后的实际墨迹算
+  标题斜切     默认关     ← 参考图是斜的，但中文剪切后笔画端会出斜口，--italic 18~22 可开
   标题顶边距   0.050 H   ← 墨迹顶边到画布顶（不贴边）
   底行末行宽   0.905 W   ← 落点行，最大
   底行引导宽   0.700 W   ← 前面几行，明显小一档（一行大一行小）
@@ -48,7 +48,9 @@ BOT_FONTS = {
 
 TITLE_W = 0.860        # 标题墨迹宽 / 画布宽
 TITLE_INSET = 0.050    # 标题墨迹顶边距 / 画布高
-ITALIC = 22.0          # 斜切角度（度），向右倾
+ITALIC = 0.0           # 斜切角度（度），默认 0 不斜
+# 参考图是斜的，但中文字身方正，粗黑体剪切后笔画端部会被切出斜口，像被削了一刀。
+# 要复刻参考图那种斜体感再打开：--italic 18~22（别超过 24，中文会失真）
 TITLE_STROKE = 0.030   # 描边 / 字号（参考图有一圈很薄的浅边）
 TITLE_STROKE_COLOR = '#EAF4FF'
 
@@ -420,7 +422,7 @@ def main():
                     help='标题色，默认参考图蓝 #4490DC')
     ap.add_argument('--ink', default=INK, help='底行色，默认白')
     ap.add_argument('--italic', type=float, default=ITALIC,
-                    help='标题斜切角度，默认 28 度；0 = 不斜')
+                    help='标题斜切角度，默认 0（不斜）；18~22 复刻参考图的斜体感，别超过 24')
     ap.add_argument('--bot-cap', type=float, default=BOT_SIZE_CAP,
                     help='底行字号上限 / 标题字号，默认 0.92；1.5 = 放开')
     ap.add_argument('--title-w', type=float, default=TITLE_W,
