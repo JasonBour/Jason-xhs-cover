@@ -24,7 +24,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
 
 反面教材（都是真犯过的）：
 
-- **样式04 把参考图标题的斜切写成了默认 `ITALIC=28`**。中文是方的，剪切后竖笔变细、横笔变粗，每个方形笔画的端头都被切成斜口，看着像字被削掉一块。斜是那张图的排版选择，不是这个风格的定义——它只有 4 个字、字重也没到 900，斜了不违和；7 个字照抄就碎。
+- **样式04 把参考图标题的斜切写成了默认 `ITALIC=28`**。中文是方的，剪切后竖笔变细、横笔变粗，每个方形笔画的端头都被切成斜口，看着像字被削掉一块。斜是那张图的排版选择，不是这个风格的定义——它只有 4 个字、字重也没到 900，斜了不违和；7 个字照抄就碎。整段斜切实现（`shear` + `--italic`）后来直接删了，不留参数，免得再被误开。
 - **样式02 的边距直接抄参考图像素实测**（顶 3.35%）。可那张参考图本身就是被裁过的，照抄就贴边，用户当场看出来"上下离边缘太近"。
 
 共性：把「这一张长什么样」当成了「这个风格必须长什么样」。参考图是样本，不是规范。
@@ -92,7 +92,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
      - 样式 01 描边压脸 → `python tools/style01_stroke_stack.py --base 底图 --out 输出 --split "首行|次行|末行" [--accent] [--font] [--offset-y]`
      - 样式 02 上下压边 → `python tools/style02_edge_anchor.py --base 底图 --out 输出 --split "顶行|底1|底2" [--accent] [--bot-font] [--offset-y]`
      - 样式 03 白条压字 → `python tools/style03_white_bar.py --base 底图 --out 输出 --split "上句|下句" [--weight] [--font] [--offset-y]`
-     - 样式 04 彩字压顶 → `python tools/style04_title_band.py --base 底图 --out 输出 --split "标题|底1|底2" [--title-color] [--italic] [--veil] [--align]`
+     - 样式 04 彩字压顶 → `python tools/style04_title_band.py --base 底图 --out 输出 --split "标题|底1|底2" [--title-color] [--veil] [--align] [--title-w] [--bot-cap]`
    - 工具都在本 skill 目录内。当前工作目录不确定时**用绝对路径调用**（`~/.workbuddy/skills/cover-style-lab/tools/style01_stroke_stack.py`），别 `cd` 进去再跑。
    - **路线 B：AI 图生图**——底图需要**改造**（换背景/造场景/无底图文生图）时才用。真人底图走 AI 会重绘人物（磨皮、衣物细节变动），做真人 IP 素材慎用。
    - AI 路线仍受 credits 约束：单张约 5-10，跑前报数。

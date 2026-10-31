@@ -1,24 +1,23 @@
 # -*- coding: utf-8 -*-
 """
-样式 04 · 斜字压顶 / Italic Title Band
+样式 04 · 彩字压顶 / Color Title Band
 ================================================================
-顶部一行超大斜切标题（蓝字），底部两行白字，中间留人。
+顶部一行超大彩字标题（默认蓝），底部两行白字，中间留人。
 文字下面压一条「蓝调暗化底带」（backdrop），让白字从任何底图上浮出来。
 参考图里的「上集」角标、订阅按钮、姓名条**一律不做** —— 只留上下两行 + 底带。
 
 和样式02 的区别
   02：顶行小（宋体标签）+ 底部大字，无底带，只靠阴影托字
-  04：顶行超大（黑体斜切）+ 底部两行，有蓝调暗化底带（这版的核心）
+  04：顶行超大彩色（黑体）+ 底部两行，有蓝调暗化底带（这版的核心）
 
 设计常量（相对画布 W / H，换画布也成立）
   标题墨迹宽   0.860 W   ← 硬约束：与字数无关，字号是变量
-  标题斜切     默认关     ← 参考图是斜的，但中文剪切后笔画端会出斜口，--italic 18~22 可开
   标题顶边距   0.050 H   ← 墨迹顶边到画布顶（不贴边）
   底行末行宽   0.905 W   ← 落点行，最大
-  底行引导宽   0.700 W   ← 前面几行，明显小一档（一行大一行小）
+  底行引导宽   0.800 W   ← 前面几行，明显小一档（一行大一行小）
   末行底边距   0.045 H   ← 不贴底
   底行行隙     0.018 H   ← 参考图两行贴得紧
-  底带         --veil auto：从 0.46H 起向上渐隐，向下加深到 peak（深蓝黑）
+  底带         --veil auto：0.55H 以上不压，以下按 t^0.80 加深到 peak（深蓝黑）
   对齐         标题居中 / 底行左对齐（参考图特征），--align center 可切
 
 用法
@@ -28,7 +27,6 @@
       --top "隐藏天赋" --bottom "如何用 AI 找到属于自己的天赋"
 """
 import argparse
-import math
 import os
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -48,9 +46,6 @@ BOT_FONTS = {
 
 TITLE_W = 0.860        # 标题墨迹宽 / 画布宽
 TITLE_INSET = 0.050    # 标题墨迹顶边距 / 画布高
-ITALIC = 0.0           # 斜切角度（度），默认 0 不斜
-# 参考图是斜的，但中文字身方正，粗黑体剪切后笔画端部会被切出斜口，像被削了一刀。
-# 要复刻参考图那种斜体感再打开：--italic 18~22（别超过 24，中文会失真）
 TITLE_STROKE = 0.030   # 描边 / 字号（参考图有一圈很薄的浅边）
 TITLE_STROKE_COLOR = '#EAF4FF'
 
@@ -180,9 +175,9 @@ def auto_split(text, n=2):
 
 # ------------------------------------------------------------ 单行渲染
 
-def draw_line(text, presets, preset, size, color, italic=0.0,
+def draw_line(text, presets, preset, size, color,
               stroke_w=0.0, stroke_color=None):
-    """画一行字（可选描边 + 斜切），返回按墨迹裁切的图层"""
+    """画一行字（可选描边），返回按墨迹裁切的图层"""
     f = make_font(presets, preset, size)
     pad = int(size * 0.8) + 50
     st = int(round(stroke_w))
@@ -195,28 +190,12 @@ def draw_line(text, presets, preset, size, color, italic=0.0,
     if not bb:
         return None
     layer = tmp.crop(bb)
-    if italic:
-        layer = shear(layer, italic)
     return layer
 
 
-def shear(layer, deg):
-    """向右倾的斜切（斜体感）。保持高度不变，向右扩展画布
-    注意：transform 的输出尺寸必须包含扩展区，否则右移的部分会被直接切掉
-    """
-    w, h = layer.size
-    k = math.tan(math.radians(deg))
-    extra = int(math.ceil(h * k))
-    # x' = x - k*y + extra  → 顶端右移 extra、底端不动，整体是向右倾的斜体
-    out = layer.transform((w + extra, h), Image.AFFINE,
-                          (1, -k, extra, 0, 1, 0), resample=Image.BICUBIC)
-    bb = out.getbbox()
-    return out.crop(bb) if bb else out
-
-
 def fit_line(text, presets, preset, target_w, color, canvas_w,
-             italic=0.0, stroke_w=0.0, stroke_color=None, max_size=None):
-    """二分反解字号，让这一行【剪切后】的墨迹宽度 = target_w
+             stroke_w=0.0, stroke_color=None, max_size=None):
+    """二分反解字号，让这一行的墨迹宽度 = target_w
     max_size：字号硬上限（像素）。给底行用，短句不许放大到比标题还大。
     """
     hi = canvas_w * MAX_SIZE
@@ -226,7 +205,7 @@ def fit_line(text, presets, preset, target_w, color, canvas_w,
     best = None
     for _ in range(24):
         mid = (lo + hi) / 2
-        layer = draw_line(text, presets, preset, mid, color, italic,
+        layer = draw_line(text, presets, preset, mid, color,
                           stroke_w, stroke_color)
         if layer is None:
             break
@@ -236,10 +215,10 @@ def fit_line(text, presets, preset, target_w, color, canvas_w,
         else:
             hi = mid
     if best is None:
-        layer = draw_line(text, presets, preset, lo, color, italic,
+        layer = draw_line(text, presets, preset, lo, color,
                           stroke_w, stroke_color)
         best = (layer, lo)
-    # 实绘宽度回修（斜切后宽度没有解析式，只能反复实绘逼近）
+    # 实绘宽度回修（估算与实际绘制差 1-2%，反复逼近）
     layer, size = best
     for _ in range(4):
         if not layer or layer.width == 0:
@@ -248,7 +227,7 @@ def fit_line(text, presets, preset, target_w, color, canvas_w,
         if abs(1 - ratio) < 0.004:
             break
         size = min(max(size * ratio, canvas_w * MIN_SIZE), hi)
-        layer = draw_line(text, presets, preset, size, color, italic,
+        layer = draw_line(text, presets, preset, size, color,
                           stroke_w, stroke_color)
     return layer, size
 
@@ -287,7 +266,7 @@ def build_veil(W, H, color, peak, top_ratio):
 def render(base, out, split=None, top=None, bottom=None,
            title_font='noto', bot_font='noto',
            title_color=TITLE_COLOR, ink=INK,
-           italic=ITALIC, title_stroke=TITLE_STROKE, title_w=TITLE_W,
+           title_stroke=TITLE_STROKE, title_w=TITLE_W,
            width=1080, height=1440, offset_y=0,
            shadow=True, veil='auto', veil_color=VEIL_COLOR, veil_peak=VEIL_PEAK,
            align='left', bot_cap=BOT_SIZE_CAP, demo_grid=False):
@@ -327,8 +306,7 @@ def render(base, out, split=None, top=None, bottom=None,
 
     # ---- 逐行反解字号
     title_layers = [fit_line(t, TITLE_FONTS, title_font, W * title_w, tc, W,
-                             italic=italic, stroke_w=0,
-                             stroke_color=None)
+                             stroke_w=0, stroke_color=None)
                     for t in top_lines]
     # 底行字号天花板：不许超过标题的 0.92 —— 短句（如「三个建议」）撑满宽会反客为主
     cap = None
@@ -410,7 +388,7 @@ def render(base, out, split=None, top=None, bottom=None,
 
 
 def main():
-    ap = argparse.ArgumentParser(description='样式04 · 斜字压顶')
+    ap = argparse.ArgumentParser(description='样式04 · 彩字压顶')
     ap.add_argument('--base', required=True)
     ap.add_argument('--out', required=True)
     ap.add_argument('--split', help='手动分行：标题|底1|底2，第一段是顶部大标题')
@@ -421,8 +399,6 @@ def main():
     ap.add_argument('--title-color', default=TITLE_COLOR,
                     help='标题色，默认参考图蓝 #4490DC')
     ap.add_argument('--ink', default=INK, help='底行色，默认白')
-    ap.add_argument('--italic', type=float, default=ITALIC,
-                    help='标题斜切角度，默认 0（不斜）；18~22 复刻参考图的斜体感，别超过 24')
     ap.add_argument('--bot-cap', type=float, default=BOT_SIZE_CAP,
                     help='底行字号上限 / 标题字号，默认 0.92；1.5 = 放开')
     ap.add_argument('--title-w', type=float, default=TITLE_W,
@@ -442,7 +418,7 @@ def main():
 
     p = render(a.base, a.out, a.split, a.top, a.bottom,
                a.title_font, a.bot_font, a.title_color, a.ink,
-               a.italic, TITLE_STROKE, a.title_w, a.width, round(a.width * 4 / 3),
+               TITLE_STROKE, a.title_w, a.width, round(a.width * 4 / 3),
                offset_y=a.offset_y, shadow=not a.no_shadow,
                veil=(a.veil if a.veil == 'auto' else int(a.veil)),
                veil_color=a.veil_color,
