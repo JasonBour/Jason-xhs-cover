@@ -201,6 +201,7 @@ def fit_line(text, presets, preset, target_w, color, canvas_w,
     hi = canvas_w * MAX_SIZE
     if max_size:
         hi = min(hi, max_size)
+    hi0 = hi                     # 回修的绝对上限，不能用二分收敛后的 hi
     lo = min(canvas_w * MIN_SIZE, hi)
     best = None
     for _ in range(24):
@@ -226,7 +227,7 @@ def fit_line(text, presets, preset, target_w, color, canvas_w,
         ratio = target_w / layer.width
         if abs(1 - ratio) < 0.004:
             break
-        size = min(max(size * ratio, canvas_w * MIN_SIZE), hi)
+        size = min(max(size * ratio, canvas_w * MIN_SIZE), hi0)
         layer = draw_line(text, presets, preset, size, color,
                           stroke_w, stroke_color)
     return layer, size
