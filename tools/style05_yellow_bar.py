@@ -27,6 +27,7 @@
 """
 import argparse
 import os
+import sys
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -43,17 +44,25 @@ BLACK = '#000000'
 
 ID_W = 0.860           # 身份行墨迹宽 / 画布宽
 INK_W = 0.920          # 主标题墨迹宽 / 画布宽（故意比黄条宽，字咬出条外）
-BOT_W = 0.930          # 底行墨迹宽 / 画布宽（底行要压得比黄条宽一点）
+BOT_W = 0.900          # 底行墨迹宽 / 画布宽（贴边到 0.93 会压到画布边，0.90 更稳）
 BAR_SCALE = 0.950      # 黄条宽 / 主标题墨迹宽（<1 = 字咬出黄条两侧，参考图就是这样）
 BAR_H = 1.42           # 黄条高 / 主标题墨迹高
 BAR_CY = 0.620         # 黄条中心 y / 画布高
 GAP_ID = 0.024         # 身份行墨迹底 → 黄条顶 / 画布宽
 GAP_BOT = 0.024        # 黄条底 → 底行墨迹顶 / 画布宽
 STROKE = 0.065         # 黑描边 / 字号
-ID_CAP = 0.64          # 身份行字号上限 / 主标题字号
-BOT_CAP = 0.72         # 底行字号上限 / 主标题字号
+ID_CAP = 0.80          # 身份行字号上限 / 主标题字号（绝对上限为主，这个只兜底）
+BOT_CAP = 0.88         # 底行字号上限 / 主标题字号（绝对上限为主，这个只兜底）
 MIN_SIZE = 0.045       # 字号下限 / 画布宽
 MAX_SIZE = 0.230       # 字号上限 / 画布宽
+# 主标题字号范围（这是本卡最容易失控的地方）
+# 主标题宽度写死 0.92W 时，4 字会放到 235 号——黄条厚成一条路障，字比画面还重。
+# 参考图是 6 字 / 87.9%W → 159 号，所以给主标题一个字号上下限，超出就让宽度自己收。
+# 三行各自一个字号范围，互不联动。以前身份行/底行按「主标题 × 比例」算，
+# 主标题一变大，上下两行跟着膨胀，底行会撑到 93%W 撞边 —— 比例制必须换掉。
+INK_MAX = 0.148        # 主标题字号上限 / 画布宽（≈160 号）
+ID_MAX = 0.118         # 身份行字号上限 / 画布宽（≈127 号）
+BOT_MAX = 0.120        # 底行字号上限 / 画布宽（≈130 号）
 
 SHADOW_ALPHA = 120     # 白字投影浓度（底图本身暗，不需要太重）
 SHADOW_DY = 0.0050     # / 画布高
@@ -202,6 +211,7 @@ def render(base, out, id_text='', ink_text='', bot_text='', hl_words='',
            font='noto', yellow=YELLOW, ink=WHITE,
            bar_scale=BAR_SCALE, bar_cy=BAR_CY, stroke=STROKE,
            id_w=ID_W, ink_w=INK_W, bot_w=BOT_W,
+           ink_max=INK_MAX, id_max=ID_MAX, bot_max=BOT_MAX,
            id_cap=ID_CAP, bot_cap=BOT_CAP,
            width=1080, height=1440, offset_y=0, shadow=True):
     W, H = width, height
@@ -214,18 +224,27 @@ def render(base, out, id_text='', ink_text='', bot_text='', hl_words='',
     # ---- 主标题：黑字无描边，压在黄条上
     ink_layer, ink_size = fit_line(
         ink_text, FONTS, font, W * ink_w, W, hex2rgba(BLACK),
-        stroke_ratio=0.0) if ink_text else (None, 0)
+        stroke_ratio=0.0, max_size=W * ink_max) if ink_text else (None, 0)
+
+    # 这套样式的骨架是「主标题 4-6 字」：少于 4 字黄条窄成一坨，多于 7 字字号塌到跟上下行一样大
+    n_ink = len(ink_text.strip()) if ink_text else 0
+    if n_ink and n_ink < 4:
+        print(f'  [warn] 主标题只有 {n_ink} 字，黄条会窄到 {n_ink/6:.0%} 左右；'
+              f'建议补到 4-6 字', file=sys.stderr)
+    elif n_ink > 7:
+        print(f'  [warn] 主标题 {n_ink} 字，字号已降到 {round(ink_size)}，'
+              f'层级会跟上下行拉平；建议压到 7 字以内', file=sys.stderr)
 
     # ---- 身份行：白字黑边，字号不许超过主标题
     id_layer, id_size = fit_line(
         id_text, FONTS, font, W * id_w, W, hex2rgba(ink),
-        stroke_ratio=stroke, max_size=ink_size * id_cap
+        stroke_ratio=stroke, max_size=min(W * id_max, ink_size * id_cap)
     ) if id_text else (None, 0)
     # 主标题字多时字号本来就小，cap 会把身份行压成一小团 —— 撑不满 0.62 W 就放宽重解
     if id_layer and id_layer.width < W * 0.62:
         id_layer, id_size = fit_line(
             id_text, FONTS, font, W * id_w, W, hex2rgba(ink),
-            stroke_ratio=stroke, max_size=min(ink_size, ink_size * id_cap * 1.35))
+            stroke_ratio=stroke, max_size=min(W * id_max, ink_size * id_cap * 1.35))
 
     # ---- 底行：白字黑边 + 高亮词，按 | 拆多行
     bot_lines = [t.strip() for t in (bot_text or '').split('|') if t.strip()]
@@ -235,7 +254,7 @@ def render(base, out, id_text='', ink_text='', bot_text='', hl_words='',
         bot_layers.append(fit_line(
             t, FONTS, font, W * bot_w, W, hex2rgba(ink),
             hl_words=net, hl_color=hex2rgba(yellow),
-            stroke_ratio=stroke, max_size=ink_size * bot_cap))
+            stroke_ratio=stroke, max_size=min(W * bot_max, ink_size * bot_cap)))
     # 多行副标题用同一个字号：各行独立反解会一大一小，读起来像两句不相干的话
     if len(bot_layers) > 1:
         uni = min(sz for _, sz in bot_layers)
@@ -325,7 +344,15 @@ def main():
     ap.add_argument('--bar-cy', type=float, default=BAR_CY, help='黄条中心 y / 画布高')
     ap.add_argument('--stroke', type=float, default=STROKE, help='黑描边 / 字号')
     ap.add_argument('--id-w', type=float, default=ID_W)
-    ap.add_argument('--ink-w', type=float, default=INK_W)
+    ap.add_argument('--ink-w', type=float, default=INK_W,
+                    help='主标题墨迹宽上限 / 画布宽，默认 0.92；实际宽度受 --ink-max 约束')
+    ap.add_argument('--ink-max', type=float, default=INK_MAX,
+                    help='主标题字号上限 / 画布宽，默认 0.158（≈171 号）；'
+                         '字少时在这里封顶，黄条跟着收窄')
+    ap.add_argument('--id-max', type=float, default=ID_MAX,
+                    help='身份行字号上限 / 画布宽，默认 0.118（≈127 号）')
+    ap.add_argument('--bot-max', type=float, default=BOT_MAX,
+                    help='底行字号上限 / 画布宽，默认 0.132（≈143 号）')
     ap.add_argument('--bot-w', type=float, default=BOT_W)
     ap.add_argument('--id-cap', type=float, default=ID_CAP)
     ap.add_argument('--bot-cap', type=float, default=BOT_CAP)
@@ -339,6 +366,7 @@ def main():
                font=a.font, yellow=a.yellow, ink=WHITE,
                bar_scale=a.bar_scale, bar_cy=a.bar_cy, stroke=a.stroke,
                id_w=a.id_w, ink_w=a.ink_w, bot_w=a.bot_w,
+               ink_max=a.ink_max, id_max=a.id_max, bot_max=a.bot_max,
                id_cap=a.id_cap, bot_cap=a.bot_cap,
                width=a.width, height=round(a.width * 4 / 3),
                offset_y=a.offset_y, shadow=not a.no_shadow)
