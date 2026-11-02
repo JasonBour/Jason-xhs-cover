@@ -227,6 +227,15 @@ def render(base, out, id_text='', ink_text='', bot_text='', hl_words='',
         stroke_ratio=0.0, max_size=W * ink_max) if ink_text else (None, 0)
 
     # 这套样式的骨架是「主标题 4-6 字」：少于 4 字黄条窄成一坨，多于 7 字字号塌到跟上下行一样大
+    # 副标题也是「一条撑满 0.90W」：超过 9 字字号会掉到身份行以下，读起来比上面还弱
+    for t in (bot_text or '').split('|'):
+        n_bot = len(t.strip())
+        if n_bot > 9:
+            print(f'  [warn] 副标题「{t.strip()}」{n_bot} 字，字号会掉到 '
+                  f'{max(60, round(880 / n_bot))} 上下，比身份行还小；建议压到 9 字内',
+                  file=sys.stderr)
+            break
+
     n_ink = len(ink_text.strip()) if ink_text else 0
     if n_ink and n_ink < 4:
         print(f'  [warn] 主标题只有 {n_ink} 字，黄条会窄到 {n_ink/6:.0%} 左右；'
