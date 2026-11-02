@@ -221,6 +221,11 @@ def render(base, out, id_text='', ink_text='', bot_text='', hl_words='',
         id_text, FONTS, font, W * id_w, W, hex2rgba(ink),
         stroke_ratio=stroke, max_size=ink_size * id_cap
     ) if id_text else (None, 0)
+    # 主标题字多时字号本来就小，cap 会把身份行压成一小团 —— 撑不满 0.62 W 就放宽重解
+    if id_layer and id_layer.width < W * 0.62:
+        id_layer, id_size = fit_line(
+            id_text, FONTS, font, W * id_w, W, hex2rgba(ink),
+            stroke_ratio=stroke, max_size=min(ink_size, ink_size * id_cap * 1.35))
 
     # ---- 底行：白字黑边 + 高亮词，按 | 拆多行
     bot_lines = [t.strip() for t in (bot_text or '').split('|') if t.strip()]
