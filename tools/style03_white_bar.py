@@ -147,7 +147,7 @@ def auto_split(text, n=2):
 def render(base, out, split=None, title=None, font='notoserif', weight=600,
            width=1080, height=1440, s_ratio=S_RATIO, pad_ratio=PAD_RATIO,
            gap_ratio=GAP_RATIO, left_ratio=LEFT_RATIO, top_ratio=TOP_RATIO,
-           offset_y=0, bar_color=BAR_COLOR, ink=INK, demo_grid=False):
+           offset_y=0, bar_color=BAR_COLOR, ink=INK, demo_grid=False, unify=False):
     preset_holder['font'] = font
     preset_holder['weight'] = weight
     W, H = width, height
@@ -161,14 +161,23 @@ def render(base, out, split=None, title=None, font='notoserif', weight=600,
         raise SystemExit('需要 --split 或 --title')
 
     S = W * s_ratio
-    pad = S * pad_ratio
-    gap = S * gap_ratio
-    bar_h = S + 2 * pad
     left = W * left_ratio
 
     # 预排版：算出每行白条宽度与文字墨迹
-    f = load_font(S)
     probe = ImageDraw.Draw(Image.new('RGBA', (8, 8)))
+    # 超宽自动缩：最长的那条白条必须放进画布（左右各留一个 left 边距）
+    # 反例：11 字长句按 0.0901W 会占到 96.2%W 并溢出右边，文字被裁
+    avail = W - 2 * left
+    for _ in range(5):
+        pad = S * pad_ratio
+        f = load_font(S)
+        tw_max = max(probe.textlength(ln, font=f) for ln in lines)
+        if tw_max + 2 * pad <= avail:
+            break
+        S = max(20.0, S * (avail - 2 * pad) / tw_max)
+    gap = S * gap_ratio
+    bar_h = S + 2 * pad
+
     # 用满框汉字「国」的墨迹中心作为垂直基准：
     # 汉字墨迹在字身框内偏上，按 ascent/descent 居中会整体偏上，必须按墨迹算
     rb = f.getbbox('国', anchor='ls')
@@ -177,6 +186,13 @@ def render(base, out, split=None, title=None, font='notoserif', weight=600,
     for ln in lines:
         tw = probe.textlength(ln, font=f)
         rows.append({'text': ln, 'tw': tw, 'bw': tw + 2 * pad})
+
+    # 等宽模式：所有白条取最宽那条的宽度。
+    # 底图上有字幕/水印时，窄条盖不住，字幕尾巴会从右侧露出来
+    if unify:
+        max_bw = max(r['bw'] for r in rows)
+        for r in rows:
+            r['bw'] = max_bw
 
     y = H * top_ratio + offset_y
     draw = ImageDraw.Draw(img)
@@ -211,6 +227,12 @@ def main():
     ap.add_argument('--title', help='整句标题，自动断成两行')
     ap.add_argument('--font', default='notoserif', choices=list(FONT_PRESETS))
     ap.add_argument('--weight', type=int, default=600, help='思源宋体字重 400-900')
+    ap.add_argument('--size', type=float, default=S_RATIO,
+                    help='字号 / 画布宽，默认 0.0901；超宽时仍会自动缩')
+    ap.add_argument('--gap', type=float, default=GAP_RATIO,
+                    help='条间距 / 字号，默认 0.63；底图有字幕/水印要一并盖掉时调小到 0.05')
+    ap.add_argument('--unify', action='store_true',
+                    help='所有白条等宽（取最宽行），用于盖住底图整行字幕')
     ap.add_argument('--width', type=int, default=1080,
                     help='画布宽，高度自动按 3:4 计算（全库统一 3:4）')
     ap.add_argument('--offset-y', type=int, default=0, help='整块上下微调')
@@ -218,8 +240,9 @@ def main():
     a = ap.parse_args()
 
     p = render(a.base, a.out, a.split, a.title, a.font, a.weight,
-               a.width, round(a.width * 4 / 3), offset_y=a.offset_y,
-               demo_grid=a.demo_grid)
+               a.width, round(a.width * 4 / 3), s_ratio=a.size,
+               gap_ratio=a.gap, offset_y=a.offset_y, demo_grid=a.demo_grid,
+               unify=a.unify)
     print(f"saved: {a.out}  {p['size'][0]}x{p['size'][1]}")
     print(f"字体={a.font}/{a.weight}  S={p['S']}  pad={p['pad']}  "
           f"条高={p['bar_h']}  条间距={p['gap']}")
