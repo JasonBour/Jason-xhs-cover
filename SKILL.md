@@ -1,6 +1,6 @@
 ---
 name: cover-style-lab
-description: 封面风格工坊。把用户不断投喂的优质 IP 封面图归纳成可复刻的「风格卡片」+ 编号（样式01 描边压脸 / 样式02 上下压边 / 样式03 白条压字 / 样式04 彩字压顶 / 样式05 黄条压字），未来用户给底图+文案标题时，按编号或风格匹配直接产出对应封面图。所有封面统一 3:4。触发词："参考图"/"收藏这张封面"/"存个风格"/"按这个风格出图"/"封面图"/"cover"/"分析这张图什么风格"/"用第一种样式"/"样式01"/"把这个样式变成标准"。触发词还含"用样式04""彩字封面""底部暗化""用样式05""黄条封面""黄底黑字"。三段流程：collect(收图拆解) → taxonomy(归纳风格库) → compose(按风格出图)。
+description: 封面风格工坊。把用户不断投喂的优质 IP 封面图归纳成可复刻的「风格卡片」+ 编号（样式01 描边压脸 / 样式02 上下压边 / 样式03 白条压字 / 样式04 彩字压顶 / 样式05 黄条压字 / 样式06 卡片展示），未来用户给底图+文案标题时，按编号或风格匹配直接产出对应封面图。所有封面统一 3:4。**出图前必须先让用户选样式，不许自己挑。** 触发词："参考图"/"收藏这张封面"/"存个风格"/"按这个风格出图"/"封面图"/"cover"/"分析这张图什么风格"/"用第一种样式"/"样式01"/"把这个样式变成标准"。触发词还含"用样式04""彩字封面""底部暗化""用样式05""黄条封面""黄底黑字""用样式06""卡片封面""工具清单封面"。三段流程：collect(收图拆解) → taxonomy(归纳风格库) → compose(按风格出图)。
 argument-hint: [收图|出图] [图片/链接] [文案标题]
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferExecuteTool), WebFetch
 ---
@@ -55,6 +55,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
 | **03** | 白条压字 | **纯白硬边横条** + **黑色宋体**，左对齐，横切人物腰腹 | `tools/style03_white_bar.py` |
 | **04** | 彩字压顶 | **顶部超大彩字标题 + 底部两行白字 + 下半身暗化底带**，中间露人；只留两处文字，不做角标/按钮 | `tools/style04_title_band.py` |
 | **05** | 黄条压字 | **白字身份行 + 柠檬黄横条压黑字（字比条宽、咬出条外）+ 白字副标题带黄色高亮词**，三件套卡在下半身 | `tools/style05_yellow_bar.py` |
+| **06** | 卡片展示 | **米白圆角卡片 + 三行左对齐大标题（末行换色）+ 深色内容面板 + 右下圆形头像**，像一张产品说明书；完全不依赖照片 | `tools/style06_card_showcase.py` |
 
 > **画布统一 3:4（1080×1440）**。五个出图器都只出 3:4，`--width` 只改宽度、高度自动按比例算。这条不接受覆盖——同一批封面要做合集、做主页九宫格，比例不一致就废了。
 
@@ -108,6 +109,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
 03 白条压字 · 纯白硬条 + 宋体，最设计感
 04 彩字压顶 · 顶部大字 + 底部暗带，最有电影感
 05 黄条压字 · 黄条压黑字，信息层级最强、最叫卖
+06 卡片展示 · 米白卡片 + 深色面板，清单/教程/系统用，不需要照片
 ```
 
 - 用户回"随便 / 你定 / 看着办" → 仍然先给一句推荐（底图气质 + 文案语气 → 哪张最贴），再让 ta 回编号。**不要替 ta 决定完就直接出。**
@@ -127,6 +129,7 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, ImageGen(经DeferE
      - 样式 03 白条压字 → `python tools/style03_white_bar.py --base 底图 --out 输出 --split "上句|下句" [--weight] [--size] [--gap] [--unify] [--offset-y]`
      - 样式 04 彩字压顶 → `python tools/style04_title_band.py --base 底图 --out 输出 --split "标题|底1|底2" [--title-color] [--veil] [--align] [--title-w] [--bot-cap]`
      - 样式 05 黄条压字 → `python tools/style05_yellow_bar.py --base 底图 --out 输出 --id "身份行" --ink "主标题" --bot "副标题" --hl "要高亮的词" [--yellow] [--bar-scale] [--stroke]`
+     - 样式 06 卡片展示 → `python tools/style06_card_showcase.py --out 输出 --l1 "第一行" --l2 "第二行" --l3 "强调行" --tiles "名字:色值:用途|…" [--accent] [--avatar]`（不需要底图）
    - 工具都在本 skill 目录内。当前工作目录不确定时**用绝对路径调用**（`~/.workbuddy/skills/cover-style-lab/tools/style01_stroke_stack.py`），别 `cd` 进去再跑。
    - **路线 B：AI 图生图**——底图需要**改造**（换背景/造场景/无底图文生图）时才用。真人底图走 AI 会重绘人物（磨皮、衣物细节变动），做真人 IP 素材慎用。
    - AI 路线仍受 credits 约束：单张约 5-10，跑前报数。
